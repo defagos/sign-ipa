@@ -7,7 +7,9 @@ SCRIPT_NAME=`basename $0`
 EXECUTION_DIR=`pwd`
 
 # Global variables
+error=""
 output_dir=""
+plist_buddy_command=""
 temp_dir=""
 app_dir=""
 provision_file=""
@@ -24,7 +26,8 @@ usage() {
     echo "the same name as the original ipa and the provisioning proflie name as suffix is created."
     echo "This ipa is saved by default in the same directory as the original ipa."
     echo ""
-    echo "Usage: $SCRIPT_NAME [-o output_dir] [-h] [-v] provision_file certificate_name ipa_file"
+    echo "Usage: $SCRIPT_NAME [-o output_dir] [-p plist_buddy_command] [-h] [-v] provision_file "
+    echo "       certificate_name ipa_file"
     echo ""
     echo "Mandatory parameters:"
     echo "   provision_file              The path of the .mobileprovision file to use"
@@ -32,8 +35,11 @@ usage() {
     echo "   ipa_file                    The path of the ipa to sign"
     echo ""
     echo "Options:"
-    echo "   -o:                         Output directory. If omitted, same as the original ipa"
     echo "   -h:                         Display this documentation"
+    echo "   -o:                         Output directory. If omitted, same as the original ipa"
+    echo "   -p:                         A PlistBuddy to be executed before signing, e.g."
+    echo "                                   Set :CFBundleVersion 1.1"
+    echo "                               to update the version number to 1.1"
     echo "   -v:                         Display the script version number"
     echo ""
 }
@@ -45,14 +51,17 @@ cleanup() {
 }
 
 # Processing command-line parameters
-while getopts o:hv OPT; do
+while getopts ho:p:v OPT; do
     case "$OPT" in
-        o)
-            output_dir="$OPTARG"
-            ;;
         h)
             usage
             exit 0
+            ;;
+        o)
+            output_dir="$OPTARG"
+            ;;
+        p)
+            plist_buddy_command="$OPTARG"
             ;;
         v)
             echo "$SCRIPT_NAME version $VERSION_NBR"
@@ -129,23 +138,34 @@ app_dir=`ls -1 "$temp_dir/Payload"`
 app_dir="$temp_dir/Payload/$app_dir"
 cp "$provision_file" "$app_dir/embedded.mobileprovision"
 
-# 
-# /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.1" "$app_dir/Info.plist"
+# Execute optional PlistBuddy command
+if [ ! -z "$plist_buddy_command" ]; then
+    echo "Executing PlistBuddy command..."
+    error=$(/usr/libexec/PlistBuddy -c "$plist_buddy_command" "$app_dir/Info.plist" 2>&1 > /dev/null)
+    if [ "$?" -ne "0" ]; then
+        echo "[ERROR] PlistBuddy command execution failed: $error"
+        cleanup
+        exit 1
+    fi
+    
+    # Save as binary plist. Not needed (an XML plist works), but the original plist is binary
+    plutil -convert binary1 "$app_dir/Info.plist"
+fi
 
 # Perform code signing
 echo "Signing ipa..."
-codesign -fs "$certificate_name" --resource-rules="$app_dir/ResourceRules.plist" "$app_dir" &> /dev/null
+error=$(codesign -fs "$certificate_name" --resource-rules="$app_dir/ResourceRules.plist" "$app_dir" 2>&1 > /dev/null)
 if [ "$?" -ne "0" ]; then
-    echo "[ERROR] Code signing failed"
+    echo "[ERROR] Code signing failed: $error"
     cleanup
     exit 1
 fi
 
 # Verify code signing
 echo "Verifying the signature..."
-codesign -v "$app_dir" &> /dev/null
+error=$(codesign -v "$app_dir" 2>&1 > /dev/null)
 if [ "$?" -ne "0" ]; then
-    echo "[ERROR] Code signing verification failed"
+    echo "[ERROR] Code signing verification failed: $error"
     cleanup
     exit 1
 fi
