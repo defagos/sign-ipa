@@ -18,9 +18,12 @@ certificate_name=""
 ipa_file=""
 ipa_filename_no_ext=""
 output_ipa_file=""
+orig_application_identifier=""
+orig_entitlements=""
 prov_application_identifier=""
 prov_entitlements=""
 prov_app_id=""
+prov_app_id_regex=""
 
 # User manual
 usage() {
@@ -144,17 +147,9 @@ if [ "$?" -ne "0" ]; then
     exit 1
 fi
 
-# Add provisioning profile
-echo "Replacing provisioning profile..."
+# Find the .app
 app_dir=`ls -1 "$temp_dir/Payload"`
 app_dir="$temp_dir/Payload/$app_dir"
-cp "$provision_file" "$app_dir/embedded.mobileprovision"
-
-# Check that the provisioning profile can be used to sign the ipa (codesign does not perform such checks)
-prov_application_identifier=`string_for_key_in_provisioning_file application-identifier "$provision_file"`
-prov_entitlements=`echo "$prov_application_identifier" | cut -d . -f 1`
-prov_app_id=`echo "$prov_application_identifier" | sed -E "s/^$prov_entitlements\.(.*)$/\1/g"`
-
 
 # Execute optional PlistBuddy command
 if [ ! -z "$plist_buddy_command" ]; then
@@ -169,6 +164,39 @@ if [ ! -z "$plist_buddy_command" ]; then
     # Save as binary plist. Not needed (an XML plist works), but the original plist is binary
     plutil -convert binary1 "$app_dir/Info.plist"
 fi
+
+# Extract entitlements from the currently embedded provisioning profile
+orig_application_identifier=`string_for_key_in_provisioning_file application-identifier "$app_dir/embedded.mobileprovision"`
+orig_entitlements=`echo "$orig_application_identifier" | cut -d . -f 1`
+
+# Extract entitlements and app id of the new provisioning profile
+prov_application_identifier=`string_for_key_in_provisioning_file application-identifier "$provision_file"`
+prov_entitlements=`echo "$prov_application_identifier" | cut -d . -f 1`
+prov_app_id=`echo "$prov_application_identifier" | sed -E "s/^$prov_entitlements\.(.*)$/\1/g"`
+
+# Check that entitlements match (if not, warn the user that existing keychain entries will be lost when a user
+# updates the application using the new signed ipa)
+if [ "$orig_entitlements" != "$prov_entitlements" ]; then
+    echo "[WARN] Entitlements do not match. If the application was previously installed with another ipa, keychain "
+    echo "       entries for this application will most probably be lost"
+fi
+
+# Check that the new provisioning profile can be used to sign the ipa (codesign does not perform such checks)
+# This step must be made after PlistBuddy has been run (so that the plist is guaranteed to be final)
+# Beware that application identifiers in the provisioning profile can contain a final wildcard
+plist_app_id=`/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app_dir/Info.plist"`
+prov_app_id_regex=`echo "$prov_app_id" | sed -E 's/\*/\.\*/g'`
+echo "$plist_app_id" | grep "$prov_app_id_regex" > /dev/null
+if [ "$?" -ne "0" ]; then
+    echo "[ERROR] The provisioning profile expects an application identifier of the form $prov_app_id,"
+    echo "        but the application identifier $plist_app_id found in the plist does not match"
+    cleanup
+    exit 1
+fi
+
+# Add new provisioning profile
+echo "Replacing provisioning profile..."
+cp "$provision_file" "$app_dir/embedded.mobileprovision"
 
 # Perform code signing
 echo "Signing ipa..."
