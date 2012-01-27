@@ -18,6 +18,9 @@ certificate_name=""
 ipa_file=""
 ipa_filename_no_ext=""
 output_ipa_file=""
+prov_application_identifier=""
+prov_entitlements=""
+prov_app_id=""
 
 # User manual
 usage() {
@@ -44,10 +47,19 @@ usage() {
     echo ""
 }
 
+# Clean up temporary files
 cleanup() {
     if [ -d "$temp_dir" ]; then
         rm -rf "$temp_dir"
     fi
+}
+
+# Return the string value matching a tag in a provisioning profile file
+#   @param $1 the key
+#   @param $2 the provisioning profile file
+string_for_key_in_provisioning_file() {
+    # Process binary file as text, taking some more rows after the searched tag
+    egrep -a -A 2 "$1" "$2" | grep string | sed -E 's/^.*<string>(.*)<\/string>.*$/\1/g'
 }
 
 # Processing command-line parameters
@@ -137,6 +149,12 @@ echo "Replacing provisioning profile..."
 app_dir=`ls -1 "$temp_dir/Payload"`
 app_dir="$temp_dir/Payload/$app_dir"
 cp "$provision_file" "$app_dir/embedded.mobileprovision"
+
+# Check that the provisioning profile can be used to sign the ipa (codesign does not perform such checks)
+prov_application_identifier=`string_for_key_in_provisioning_file application-identifier "$provision_file"`
+prov_entitlements=`echo "$prov_application_identifier" | cut -d . -f 1`
+prov_app_id=`echo "$prov_application_identifier" | sed -E "s/^$prov_entitlements\.(.*)$/\1/g"`
+
 
 # Execute optional PlistBuddy command
 if [ ! -z "$plist_buddy_command" ]; then
