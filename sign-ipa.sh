@@ -3,33 +3,12 @@
 # Constants
 VERSION_NBR=1.0
 SCRIPT_NAME=`basename $0`
-# Directory from which the script is executed
-EXECUTION_DIR=`pwd`
-
-# Global variables
-error=""
-output_dir=""
-plist_buddy_command=""
-temp_dir=""
-app_dir=""
-provision_file=""
-provision_filename_no_ext=""
-certificate_name=""
-ipa_file=""
-ipa_filename_no_ext=""
-output_ipa_file=""
-orig_application_identifier=""
-orig_entitlements=""
-prov_application_identifier=""
-prov_entitlements=""
-prov_app_id=""
-prov_app_id_regex=""
 
 # User manual
 usage() {
     echo ""
     echo "Sign an existing signed ipa using another provisioning profile. On success, an ipa with "
-    echo "the same name as the original ipa and the provisioning proflie name as suffix is created."
+    echo "the same name as the original ipa and the provisioning profile name as suffix is created."
     echo "This ipa is saved by default in the same directory as the original ipa."
     echo ""
     echo "Usage: $SCRIPT_NAME [-o output_dir] [-p plist_buddy_command] [-h] [-v] provision_file "
@@ -57,7 +36,8 @@ cleanup() {
     fi
 }
 
-# Return the string value matching a tag in a provisioning profile file
+# Return the string value matching a tag in a provisioning profile file. Not a proper robust XML parsing,
+# but fulfills our needs
 #   @param $1 the key
 #   @param $2 the provisioning profile file
 string_for_key_in_provisioning_file() {
