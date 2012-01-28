@@ -107,6 +107,9 @@ if [ -z "$output_dir" ]; then
     output_dir=`dirname "$ipa_file"`
 fi
 
+# Convert to an absolute path
+output_dir=`pushd $1 > /dev/null; pwd; popd > /dev/null`
+
 # Create the output directory if it does not exist
 if [ ! -d "$output_dir" ]; then
     mkdir -p "$output_dir"
@@ -168,8 +171,8 @@ plist_app_id=`/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app_dir/I
 prov_app_id_regex=`echo "$prov_app_id" | sed -E 's/\*/\.\*/g'`
 echo "$plist_app_id" | grep "$prov_app_id_regex" > /dev/null
 if [ "$?" -ne "0" ]; then
-    echo "[ERROR] The provisioning profile expects an application identifier of the form $prov_app_id,"
-    echo "        but the application identifier $plist_app_id found in the plist does not match"
+    echo "[ERROR] The provisioning profile expects an application identifier of the form $prov_app_id, but the"
+    echo "        application identifier $plist_app_id found in the plist does not match"
     cleanup
     exit 1
 fi
