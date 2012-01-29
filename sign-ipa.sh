@@ -107,13 +107,13 @@ if [ -z "$output_dir" ]; then
     output_dir=`dirname "$ipa_file"`
 fi
 
-# Convert to an absolute path
-output_dir=`pushd $1 > /dev/null; pwd; popd > /dev/null`
-
 # Create the output directory if it does not exist
 if [ ! -d "$output_dir" ]; then
     mkdir -p "$output_dir"
 fi
+
+# Convert to an absolute path
+output_dir=`pushd "$output_dir" > /dev/null; pwd; popd > /dev/null`
 
 # Cleanup working directory
 temp_dir="$output_dir/ipa_extraction"
