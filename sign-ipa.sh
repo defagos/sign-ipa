@@ -116,7 +116,7 @@ fi
 output_dir=`pushd "$output_dir" > /dev/null; pwd; popd > /dev/null`
 
 # Cleanup working directory
-temp_dir="$output_dir/ipa_extraction"
+temp_dir="$output_dir/ipa_extraction_$$"
 if [ -d "$temp_dir" ]; then
    rm -rf "$temp_dir"
 fi
@@ -159,9 +159,13 @@ prov_app_id=`echo "$prov_application_identifier" | sed -E "s/^$prov_entitlements
 
 # Check that entitlements match (if not, warn the user that existing keychain entries will be lost when a user
 # updates the application using the new signed ipa)
+temp_entitlements_file="$temp_dir/Entitlements.plist"
 if [ "$orig_entitlements" != "$prov_entitlements" ]; then
     echo "[WARN] Entitlements do not match. If the application was previously installed with another ipa, keychain "
-    echo "       entries for this application will most probably be lost"
+    echo "       entries for this application will most probably be lost. Entitlements are not reused when signing"
+# Extract original entitlements to use them when signing the app
+else
+    codesign --display --entitlements - $app_dir 1> "$temp_entitlements_file" 2> /dev/null
 fi
 
 # Check that the new provisioning profile can be used to sign the ipa (codesign does not perform such checks)
@@ -183,7 +187,12 @@ cp "$provision_file" "$app_dir/embedded.mobileprovision"
 
 # Perform code signing
 echo "Signing ipa..."
-error=$(codesign -fs "$certificate_name" --resource-rules="$app_dir/ResourceRules.plist" "$app_dir" 2>&1 > /dev/null)
+if [[ -f "$temp_entitlements_file" ]]; then
+    error=$(codesign -fs "$certificate_name" --resource-rules="$app_dir/ResourceRules.plist" --entitlements "$temp_entitlements_file" "$app_dir" 2>&1 > /dev/null)
+else
+    error=$(codesign -fs "$certificate_name" --resource-rules="$app_dir/ResourceRules.plist" "$app_dir" 2>&1 > /dev/null)
+fi
+
 if [ "$?" -ne "0" ]; then
     echo "[ERROR] Code signing failed: $error"
     cleanup
